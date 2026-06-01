@@ -18,3 +18,4 @@ htmlcov/
 Thumbs.db
 postgres_data/
 .mypy_cache/
+celerybeat-schedule

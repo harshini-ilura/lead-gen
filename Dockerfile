@@ -11,8 +11,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browser (used only as JS-rendering fallback)
-RUN playwright install chromium --with-deps
 
 COPY . .
 
