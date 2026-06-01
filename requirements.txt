@@ -1,0 +1,32 @@
+# Web framework
+fastapi>=0.111,<0.116
+uvicorn[standard]>=0.29,<0.35
+
+# Config
+pydantic-settings>=2.2,<3.0
+
+# Database
+sqlalchemy[asyncio]>=2.0,<2.1
+asyncpg>=0.29,<0.31
+psycopg2-binary>=2.9,<3.0
+alembic>=1.13,<2.0
+
+# Queue / cache
+celery[redis]>=5.3,<6.0
+redis>=5.0,<6.0
+kombu>=5.3,<6.0
+
+# HTTP client
+httpx>=0.27,<0.29
+
+# Crawling / parsing
+beautifulsoup4>=4.12,<5.0
+lxml>=5.0,<6.0
+playwright>=1.44,<2.0
+
+# Data processing
+tldextract>=5.1,<6.0
+phonenumbers>=8.13,<9.0
+
+# Email verification (free pipeline)
+dnspython>=2.6,<3.0
