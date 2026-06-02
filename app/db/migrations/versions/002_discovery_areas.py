@@ -22,10 +22,8 @@ def upgrade() -> None:
         sa.Column("emirate", sa.Text(), nullable=False),
         sa.Column("source", sa.Text(), server_default="seed", nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
-        sa.Column("times_seen", sa.Integer(), server_default="0", nullable=True),
         sa.Column("last_run_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("last_result_count", sa.Integer(), nullable=True),
-        sa.Column("is_saturated", sa.Boolean(), server_default="false", nullable=False),
         sa.Column(
             "created_at",
             sa.TIMESTAMP(timezone=True),

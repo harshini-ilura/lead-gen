@@ -25,8 +25,7 @@ from celery_app import celery
 
 logger = logging.getLogger(__name__)
 
-# An area returning the full 3-page cap (60) is truncated — more agencies exist.
-PLACES_MAX_RESULTS = 60
+# Google Text Search caps at 3 pages × 20 = 60 results per query.
 _MAX_PAGES = 3
 
 _EMIRATE_KEYWORDS = {
@@ -196,22 +195,17 @@ async def _run_discovery(query: str, area_id: Optional[int] = None):
                 )
 
         if area_id is not None:
+            # Run telemetry only — when did we last query this area and how
+            # many results it returned. Not a feedback signal.
             await session.execute(
                 update(DiscoveryArea)
                 .where(DiscoveryArea.id == area_id)
                 .values(
                     last_run_at=func.now(),
                     last_result_count=len(all_places),
-                    is_saturated=len(all_places) >= PLACES_MAX_RESULTS,
                 )
             )
         await session.commit()
-
-    if len(all_places) >= PLACES_MAX_RESULTS:
-        logger.warning(
-            "Area saturated (%d results) — consider sub-tiling: %s",
-            len(all_places), query,
-        )
 
 
 # ── OSM supplementary (all UAE) ───────────────────────────────────────────

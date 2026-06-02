@@ -111,10 +111,10 @@ class CrawlCache(Base):
 
 
 class DiscoveryArea(Base):
-    """Seed areas that Beat/API fan out into Places discovery queries.
+    """Curated seed areas that Beat/API fan out into Places discovery queries.
 
-    Populated from curated CSV exports (source='seed') and grown by the
-    address-component feedback loop (source='loop').
+    The list is built offline (per location) and loaded via
+    scripts/load_discovery_areas.py; the app only reads/queries it.
     """
     __tablename__ = "discovery_areas"
 
@@ -123,11 +123,9 @@ class DiscoveryArea(Base):
     emirate: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[Optional[str]] = mapped_column(Text, server_default="seed")
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
-    # Stats updated after each discovery run for prioritisation / saturation.
-    times_seen: Mapped[Optional[int]] = mapped_column(Integer, server_default="0")
+    # Run telemetry: when this area was last queried and how many it returned.
     last_run_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     last_result_count: Mapped[Optional[int]] = mapped_column(Integer)
-    is_saturated: Mapped[bool] = mapped_column(Boolean, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
