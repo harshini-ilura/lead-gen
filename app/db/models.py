@@ -110,6 +110,34 @@ class CrawlCache(Base):
     next_recrawl_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
 
 
+class DiscoveryArea(Base):
+    """Seed areas that Beat/API fan out into Places discovery queries.
+
+    Populated from curated CSV exports (source='seed') and grown by the
+    address-component feedback loop (source='loop').
+    """
+    __tablename__ = "discovery_areas"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    area_name: Mapped[str] = mapped_column(Text, nullable=False)
+    emirate: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(Text, server_default="seed")
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # Stats updated after each discovery run for prioritisation / saturation.
+    times_seen: Mapped[Optional[int]] = mapped_column(Integer, server_default="0")
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    last_result_count: Mapped[Optional[int]] = mapped_column(Integer)
+    is_saturated: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("emirate", "area_name", name="idx_discovery_area_uniq"),
+        Index("idx_discovery_areas_active", "emirate", "is_active"),
+    )
+
+
 class SuppressionList(Base):
     __tablename__ = "suppression_list"
 

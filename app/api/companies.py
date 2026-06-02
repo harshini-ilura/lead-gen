@@ -7,8 +7,9 @@ from app.api.schemas import (
     DiscoveryTriggerRequest,
     DiscoveryTriggerResponse,
 )
-from app.db.models import Company
+from app.db.models import Company, DiscoveryArea
 from app.db.session import get_db
+from app.sources.google_places import build_discovery_query
 from app.workers.discovery import get_areas_for_emirate
 
 router = APIRouter(tags=["companies"])
@@ -24,7 +25,7 @@ async def search_companies(
     result = await db.execute(
         text(
             "SELECT * FROM companies "
-            "WHERE (:emirate IS NULL OR emirate = :emirate) "
+            "WHERE (CAST(:emirate AS text) IS NULL OR emirate = :emirate) "
             "AND normalized_name IS NOT NULL "
             "AND similarity(normalized_name, :name) > 0.3 "
             "ORDER BY similarity(normalized_name, :name) DESC "
@@ -72,7 +73,9 @@ async def list_companies(
 
 
 @router.post("/discovery/trigger", response_model=DiscoveryTriggerResponse)
-async def trigger_discovery(req: DiscoveryTriggerRequest):
+async def trigger_discovery(
+    req: DiscoveryTriggerRequest, db: AsyncSession = Depends(get_db)
+):
     from celery_app import celery
 
     enqueued = 0
@@ -81,15 +84,42 @@ async def trigger_discovery(req: DiscoveryTriggerRequest):
         celery.send_task("app.workers.discovery.run_dld_seed", queue="discovery")
         enqueued += 1
 
-    areas = req.areas or get_areas_for_emirate(req.emirate)
-    for area in areas:
-        query = f"real estate agency in {area} UAE"
-        celery.send_task(
-            "app.workers.discovery.run_discovery",
-            args=[query],
-            queue="discovery",
-        )
-        enqueued += 1
+    # Explicit override (req.areas) → ad-hoc queries with no area_id.
+    if req.areas:
+        for area in req.areas:
+            celery.send_task(
+                "app.workers.discovery.run_discovery",
+                args=[build_discovery_query(area, req.emirate)],
+                queue="discovery",
+            )
+            enqueued += 1
+    else:
+        # Default path: fan out the curated discovery_areas table (Bug 2).
+        rows = (
+            await db.execute(
+                select(DiscoveryArea.id, DiscoveryArea.area_name).where(
+                    DiscoveryArea.emirate == req.emirate,
+                    DiscoveryArea.is_active.is_(True),
+                )
+            )
+        ).all()
+        if not rows:
+            # Fallback to the legacy hardcoded list if the table isn't seeded yet.
+            for area in get_areas_for_emirate(req.emirate):
+                celery.send_task(
+                    "app.workers.discovery.run_discovery",
+                    args=[build_discovery_query(area, req.emirate)],
+                    queue="discovery",
+                )
+                enqueued += 1
+        else:
+            for area_id, area_name in rows:
+                celery.send_task(
+                    "app.workers.discovery.run_discovery",
+                    args=[build_discovery_query(area_name, req.emirate), area_id],
+                    queue="discovery",
+                )
+                enqueued += 1
 
     return DiscoveryTriggerResponse(
         enqueued=enqueued,

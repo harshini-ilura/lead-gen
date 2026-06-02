@@ -55,11 +55,13 @@ def normalize_company_name(name: str) -> str:
 
 def normalize_company(raw: dict) -> dict:
     website = raw.get("website")
-    phone = raw.get("phone")
+    # Prefer Google's international number (already +country), fall back to the
+    # national number. Both are validated/reformatted into strict E.164.
+    phone_source = raw.get("phone_e164") or raw.get("phone")
     name = raw.get("company_name", "")
     return {
         **raw,
         "domain": extract_domain(website),
-        "phone_e164": normalize_phone_e164(phone),
+        "phone_e164": normalize_phone_e164(phone_source),
         "normalized_name": normalize_company_name(name),
     }

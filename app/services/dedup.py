@@ -54,7 +54,9 @@ async def find_duplicate(
             await session.execute(
                 text(
                     "SELECT company_id FROM companies "
-                    "WHERE (:emirate IS NULL OR emirate = :emirate) "
+                    # Cast required: asyncpg can't infer the type of a bare bind
+                    # parameter used only in `IS NULL` (AmbiguousParameterError).
+                    "WHERE (CAST(:emirate AS text) IS NULL OR emirate = :emirate) "
                     "AND normalized_name IS NOT NULL "
                     "AND similarity(normalized_name, :name) > :threshold "
                     "ORDER BY similarity(normalized_name, :name) DESC LIMIT 1"

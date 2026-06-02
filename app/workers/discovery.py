@@ -3,14 +3,14 @@ import logging
 from typing import Optional
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.config import get_settings
-from app.db.models import Company
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, run_task
 from app.services.dedup import upsert_company
 from app.services.normalize import normalize_company
 from app.services.reliability import compute_company_confidence
+from app.db.models import Company, DiscoveryArea
 from app.sources.dld import dld_record_to_company_dict, fetch_all_licensed_agencies
 from app.sources.google_places import (
     lookup_place_by_name_phone,
@@ -24,6 +24,10 @@ from app.sources.osm import fetch_osm_real_estate, osm_element_to_company_dict
 from celery_app import celery
 
 logger = logging.getLogger(__name__)
+
+# An area returning the full 3-page cap (60) is truncated — more agencies exist.
+PLACES_MAX_RESULTS = 60
+_MAX_PAGES = 3
 
 _EMIRATE_KEYWORDS = {
     "dubai": "Dubai",
@@ -46,7 +50,7 @@ _EMIRATE_KEYWORDS = {
 )
 def run_dld_seed(self):
     try:
-        asyncio.run(_run_dld_seed())
+        run_task(_run_dld_seed())
     except Exception as exc:
         logger.exception("DLD seed failed")
         raise self.retry(exc=exc, countdown=120)
@@ -84,7 +88,7 @@ async def _run_dld_seed():
 )
 def enrich_place_from_dld(self, company_id: int):
     try:
-        asyncio.run(_enrich_place_from_dld(company_id))
+        run_task(_enrich_place_from_dld(company_id))
     except Exception as exc:
         logger.exception("enrich_place_from_dld failed: company_id=%d", company_id)
         raise self.retry(exc=exc)
@@ -148,21 +152,38 @@ async def _enrich_place_from_dld(company_id: int):
     max_retries=2,
     default_retry_delay=60,
 )
-def run_discovery(self, query: str, page_token: Optional[str] = None):
+def run_discovery(self, query: str, area_id: Optional[int] = None):
     try:
-        asyncio.run(_run_discovery(query, page_token))
+        run_task(_run_discovery(query, area_id))
     except Exception as exc:
         logger.exception("Discovery failed: query=%s", query)
         raise self.retry(exc=exc)
 
 
-async def _run_discovery(query: str, page_token: Optional[str] = None):
+async def _run_discovery(query: str, area_id: Optional[int] = None):
+    """Fetch ALL pages for one area query, store companies, record stats.
+
+    Pagination is done inline (not via re-enqueue) so we can count total
+    results per area and flag saturation — Google caps Text Search at 3
+    pages × 20 = 60 results (Bug 1).
+    """
     settings = get_settings()
+    all_places: list[dict] = []
+    token: Optional[str] = None
+
     async with httpx.AsyncClient(timeout=20) as client:
-        places, next_token = await search_places(query, settings, client, page_token=page_token)
+        for _ in range(_MAX_PAGES):
+            places, token = await search_places(
+                query, settings, client, page_token=token
+            )
+            all_places.extend(places)
+            if not token:
+                break
+            # Google requires a short delay before the next-page token is valid.
+            await asyncio.sleep(2)
 
     async with AsyncSessionLocal() as session:
-        for place in places:
+        for place in all_places:
             raw = _enrich_emirate(place_to_company_dict(place))
             normalized = normalize_company(raw)
             normalized["confidence_score"] = compute_company_confidence(normalized)
@@ -173,14 +194,23 @@ async def _run_discovery(query: str, page_token: Optional[str] = None):
                     args=[company_id],
                     queue="crawl",
                 )
+
+        if area_id is not None:
+            await session.execute(
+                update(DiscoveryArea)
+                .where(DiscoveryArea.id == area_id)
+                .values(
+                    last_run_at=func.now(),
+                    last_result_count=len(all_places),
+                    is_saturated=len(all_places) >= PLACES_MAX_RESULTS,
+                )
+            )
         await session.commit()
 
-    if next_token:
-        # Google requires ≥2s before fetching the next page
-        run_discovery.apply_async(
-            args=[query, next_token],
-            queue="discovery",
-            countdown=2,
+    if len(all_places) >= PLACES_MAX_RESULTS:
+        logger.warning(
+            "Area saturated (%d results) — consider sub-tiling: %s",
+            len(all_places), query,
         )
 
 
@@ -194,7 +224,7 @@ async def _run_discovery(query: str, page_token: Optional[str] = None):
 )
 def run_osm_discovery(self):
     try:
-        asyncio.run(_run_osm_discovery())
+        run_task(_run_osm_discovery())
     except Exception as exc:
         logger.exception("OSM discovery failed")
         raise self.retry(exc=exc, countdown=120)
@@ -224,14 +254,23 @@ async def _run_osm_discovery():
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 def _enrich_emirate(company: dict) -> dict:
-    address = (company.get("address") or "").lower()
-    for keyword, emirate in _EMIRATE_KEYWORDS.items():
-        if keyword in address:
-            company.setdefault("emirate", emirate)
-            company.setdefault("city", emirate)
-            break
-    company.setdefault("country", "AE")
-    company.setdefault("industry", "real_estate")
+    """Fallback enrichment when addressComponents didn't yield emirate/city.
+
+    place_to_company_dict sets these keys but they may be None, so we fill
+    None values here (setdefault wouldn't, since the keys already exist).
+    """
+    if not company.get("emirate"):
+        address = (company.get("address") or "").lower()
+        for keyword, emirate in _EMIRATE_KEYWORDS.items():
+            if keyword in address:
+                company["emirate"] = emirate
+                if not company.get("city"):
+                    company["city"] = emirate
+                break
+    if not company.get("country"):
+        company["country"] = "AE"
+    if not company.get("industry"):
+        company["industry"] = "real_estate_agency"
     return company
 
 
