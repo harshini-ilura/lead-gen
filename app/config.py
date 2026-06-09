@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Crawling / reliability
     crawl_user_agent: str = "LagentryBot/1.0 (+https://lagentry.example/bot)"
     crawl_max_pages_per_domain: int = 40
+    crawl_target_pages: int = 8          # focused crawl: homepage + contact pages
+    crawl_html_max_bytes: int = 200_000  # cap stored HTML per page (post-strip)
     crawl_delay_min_seconds: int = 5
     crawl_delay_max_seconds: int = 15
     recrawl_days: int = 45

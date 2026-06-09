@@ -194,3 +194,12 @@ Field fill is data-dependent: ~97% get a phone, ~80% a website, ~71% a city
   Wiring a cron schedule that hits the trigger is the way to automate it.
 - **Cost:** ~$0.032 per page request. A full 397-area Dubai run is roughly
   $13–20 depending on how many areas paginate to 3 pages.
+
+---
+
+## Phase 2 — Crawling
+
+Once a company is discovered with a `website`, discovery enqueues a crawl that
+fetches and caches the site's HTML. See **[crawl.md](crawl.md)** for the full
+Phase 2 documentation.
+

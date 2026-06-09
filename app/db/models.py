@@ -100,14 +100,20 @@ class CrawlCache(Base):
     __tablename__ = "crawl_cache"
 
     url_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     domain: Mapped[Optional[str]] = mapped_column(Text)
     url: Mapped[Optional[str]] = mapped_column(Text)
     raw_html: Mapped[Optional[str]] = mapped_column(Text)
+    content_type: Mapped[Optional[str]] = mapped_column(Text)
     status_code: Mapped[Optional[int]] = mapped_column(Integer)
     fetched_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
     next_recrawl_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+
+    __table_args__ = (
+        Index("idx_crawl_cache_company", "company_id"),
+    )
 
 
 class DiscoveryArea(Base):

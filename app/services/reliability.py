@@ -6,16 +6,26 @@ import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
-_BLOCK_INDICATORS = [
+# Phrases found on genuine block / challenge interstitials — NOT incidental
+# references like cdnjs.cloudflare.com or a reCAPTCHA widget on a contact form.
+# Bare "cloudflare"/"captcha" were removed: they match legit CDN/script URLs and
+# caused full content pages (200, 200KB+) to be falsely marked blocked.
+_BLOCK_PHRASES = [
+    "attention required!",                 # Cloudflare block page title
+    "checking your browser before accessing",
+    "cf-browser-verification",
     "access denied",
-    "cloudflare",
-    "captcha",
-    "unusual traffic",
-    "bot detection",
+    "verify you are human",
     "are you human",
-    "ddos protection",
-    "too many requests",
+    "unusual traffic from your",
+    "ddos protection by",
+    "request unsuccessful",                # Imperva/Incapsula
 ]
+
+# Real challenge pages are small interstitials. A large 200 response is genuine
+# content even if it references cloudflare/captcha in an asset URL or form widget,
+# so we only scan small bodies for the phrases above.
+_CHALLENGE_MAX_BYTES = 15_000
 
 
 def compute_company_confidence(company: dict) -> float:
@@ -60,7 +70,10 @@ def detect_block(status_code: int, body: Optional[str]) -> bool:
     # Honeypot / empty 200 response
     if len(body_lower) < 500 and status_code == 200:
         return True
-    return any(indicator in body_lower for indicator in _BLOCK_INDICATORS)
+    # Only scan small bodies for challenge phrases — large pages are real content.
+    if len(body_lower) <= _CHALLENGE_MAX_BYTES:
+        return any(phrase in body_lower for phrase in _BLOCK_PHRASES)
+    return False
 
 
 async def acquire_domain_slot(
