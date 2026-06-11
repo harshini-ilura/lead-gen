@@ -53,6 +53,21 @@ def normalize_company_name(name: str) -> str:
     return cleaned
 
 
+def normalize_person_name(name: Optional[str]) -> str:
+    """Dedup key for a person's name.
+
+    Unlike normalize_company_name, this does NOT strip legal/business words —
+    "Homes", "Group", "Properties" are valid surnames. Just fold case, drop
+    diacritics and punctuation, and collapse whitespace.
+    """
+    if not name:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_name = nfkd.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^\w\s]", " ", ascii_name.lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def normalize_company(raw: dict) -> dict:
     website = raw.get("website")
     # Prefer Google's international number (already +country), fall back to the

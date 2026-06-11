@@ -133,3 +133,30 @@ async def trigger_osm_discovery():
 
     celery.send_task("app.workers.discovery.run_osm_discovery", queue="discovery")
     return DiscoveryTriggerResponse(enqueued=1, message="OSM discovery triggered (UAE-wide)")
+
+
+@router.post("/contacts/trigger", response_model=DiscoveryTriggerResponse)
+async def trigger_contacts(
+    reprocess: bool = False, db: AsyncSession = Depends(get_db)
+):
+    """Enqueue Phase 3 contact extraction for crawled companies.
+
+    By default skips companies already extracted; pass reprocess=true to re-run
+    all crawled companies (idempotent — dedup keys prevent duplicates).
+    """
+    from celery_app import celery
+
+    q = select(Company.company_id).where(Company.crawl_status == "crawled")
+    if not reprocess:
+        q = q.where(Company.contact_status != "extracted")
+    ids = (await db.execute(q)).scalars().all()
+
+    for company_id in ids:
+        celery.send_task(
+            "app.workers.contacts.extract_contacts", args=[company_id], queue="contacts"
+        )
+
+    return DiscoveryTriggerResponse(
+        enqueued=len(ids),
+        message=f"Contact extraction triggered for {len(ids)} crawled companies",
+    )

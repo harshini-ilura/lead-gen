@@ -42,6 +42,7 @@ class Company(Base):
     raw_payload: Mapped[Optional[dict]] = mapped_column(JSONB)
     confidence_score: Mapped[Optional[float]] = mapped_column(Numeric(3, 2))
     crawl_status: Mapped[Optional[str]] = mapped_column(Text, server_default="discovered")
+    contact_status: Mapped[Optional[str]] = mapped_column(Text, server_default="crawled")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
@@ -67,6 +68,7 @@ class Contact(Base):
     contact_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     company_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     full_name: Mapped[Optional[str]] = mapped_column(Text)
+    normalized_name: Mapped[Optional[str]] = mapped_column(Text)
     first_name: Mapped[Optional[str]] = mapped_column(Text)
     last_name: Mapped[Optional[str]] = mapped_column(Text)
     job_title: Mapped[Optional[str]] = mapped_column(Text)
@@ -76,6 +78,10 @@ class Contact(Base):
     confidence_score: Mapped[Optional[float]] = mapped_column(Numeric(3, 2))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "normalized_name", name="uq_contacts_company_norm"),
     )
 
 
@@ -93,6 +99,10 @@ class ContactEmail(Base):
     verified_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("contact_id", "email", name="uq_contact_emails_contact_email"),
     )
 
 

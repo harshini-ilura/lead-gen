@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Google Maps Platform (Places API New)
     google_maps_api_key: str = ""
 
+    # OpenAI (Phase 3 contact extraction)
+    openai_api_key: str = ""
+    contact_extract_model: str = "gpt-4o-mini"
+    contact_extract_max_chars_per_page: int = 12000
+    contact_extract_max_pages: int = 8
+
     # Dubai Pulse / DLD
     dubai_pulse_api_key: str = ""
     dubai_pulse_api_secret: str = ""

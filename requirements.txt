@@ -28,5 +28,8 @@ playwright>=1.44,<2.0
 tldextract>=5.1,<6.0
 phonenumbers>=8.13,<9.0
 
+# LLM contact extraction (Phase 3)
+openai>=1.40,<2.0
+
 # Email verification (free pipeline)
 dnspython>=2.6,<3.0
