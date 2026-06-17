@@ -187,3 +187,25 @@ async def trigger_verify(
         enqueued=len(ids),
         message=f"Verification triggered for {len(ids)} emails",
     )
+
+
+@router.post("/scoring/trigger", response_model=DiscoveryTriggerResponse)
+async def trigger_scoring(db: AsyncSession = Depends(get_db)):
+    """Enqueue Phase 6 lead scoring for every company that has extracted contacts."""
+    from celery_app import celery
+
+    ids = (
+        await db.execute(
+            select(Company.company_id).where(Company.contact_status == "extracted")
+        )
+    ).scalars().all()
+
+    for company_id in ids:
+        celery.send_task(
+            "app.workers.scoring.score_company", args=[company_id], queue="scoring"
+        )
+
+    return DiscoveryTriggerResponse(
+        enqueued=len(ids),
+        message=f"Lead scoring triggered for {len(ids)} companies",
+    )
