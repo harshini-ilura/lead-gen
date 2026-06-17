@@ -96,6 +96,7 @@ class ContactEmail(Base):
     verification_status: Mapped[Optional[str]] = mapped_column(Text, server_default="unknown")
     verification_source: Mapped[Optional[str]] = mapped_column(Text)
     is_role_email: Mapped[Optional[bool]] = mapped_column(Boolean, server_default="false")
+    is_primary: Mapped[Optional[bool]] = mapped_column(Boolean, server_default="false")
     verified_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
@@ -103,6 +104,7 @@ class ContactEmail(Base):
 
     __table_args__ = (
         UniqueConstraint("contact_id", "email", name="uq_contact_emails_contact_email"),
+        Index("ix_contact_emails_contact_primary", "contact_id", "is_primary"),
     )
 
 

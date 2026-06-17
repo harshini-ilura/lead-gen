@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     bouncer_api_key: str = ""
     paid_verify_monthly_cap: int = 2000
     paid_verify_provider: str = "millionverifier"
+    mx_cache_ttl_days: int = 7
 
     # Outreach
     outreach_webhook_url: str = ""

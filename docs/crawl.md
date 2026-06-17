@@ -3,7 +3,7 @@
 How LeadGen fetches each discovered company's website and caches the relevant
 HTML pages, so Phase 3 (contact extraction) has content to parse.
 
-![Phase 2 Crawl Architecture](../phase2_architecture.png)
+![Phase 2 Crawl Architecture](diagrams/phase2_architecture.png)
 
 ---
 

@@ -3,7 +3,7 @@
 How LeadGen discovers real-estate companies via the Google Places **Text Search**
 API, seeded from a curated list of areas.
 
-![Phase 1 Architecture](../phase1_architecture.png)
+![Phase 1 Architecture](diagrams/phase1_architecture.png)
 
 ---
 

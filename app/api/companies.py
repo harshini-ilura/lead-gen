@@ -7,7 +7,7 @@ from app.api.schemas import (
     DiscoveryTriggerRequest,
     DiscoveryTriggerResponse,
 )
-from app.db.models import Company, DiscoveryArea
+from app.db.models import Company, ContactEmail, DiscoveryArea
 from app.db.session import get_db
 from app.sources.google_places import build_discovery_query
 from app.workers.discovery import get_areas_for_emirate
@@ -159,4 +159,31 @@ async def trigger_contacts(
     return DiscoveryTriggerResponse(
         enqueued=len(ids),
         message=f"Contact extraction triggered for {len(ids)} crawled companies",
+    )
+
+
+@router.post("/verify/trigger", response_model=DiscoveryTriggerResponse)
+async def trigger_verify(
+    reprocess: bool = False, db: AsyncSession = Depends(get_db)
+):
+    """Enqueue Phase 5 verification for contact emails.
+
+    By default only unverified ('unknown') emails; pass reprocess=true to re-verify
+    every email (idempotent — statuses/primary recompute deterministically).
+    """
+    from celery_app import celery
+
+    q = select(ContactEmail.email_id)
+    if not reprocess:
+        q = q.where(ContactEmail.verification_status == "unknown")
+    ids = (await db.execute(q)).scalars().all()
+
+    for email_id in ids:
+        celery.send_task(
+            "app.workers.verify.verify_contact_email", args=[email_id], queue="verify"
+        )
+
+    return DiscoveryTriggerResponse(
+        enqueued=len(ids),
+        message=f"Verification triggered for {len(ids)} emails",
     )
