@@ -209,3 +209,25 @@ async def trigger_scoring(db: AsyncSession = Depends(get_db)):
         enqueued=len(ids),
         message=f"Lead scoring triggered for {len(ids)} companies",
     )
+
+
+@router.post("/handoff/trigger", response_model=DiscoveryTriggerResponse)
+async def trigger_handoff(db: AsyncSession = Depends(get_db)):
+    """Enqueue Phase 7 outreach handoff for every company with extracted contacts."""
+    from celery_app import celery
+
+    ids = (
+        await db.execute(
+            select(Company.company_id).where(Company.contact_status == "extracted")
+        )
+    ).scalars().all()
+
+    for company_id in ids:
+        celery.send_task(
+            "app.workers.handoff.handoff_to_outreach", args=[company_id], queue="scoring"
+        )
+
+    return DiscoveryTriggerResponse(
+        enqueued=len(ids),
+        message=f"Handoff triggered for {len(ids)} companies",
+    )

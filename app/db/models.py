@@ -76,6 +76,8 @@ class Contact(Base):
     linkedin_url: Mapped[Optional[str]] = mapped_column(Text)
     source_url: Mapped[Optional[str]] = mapped_column(Text)
     confidence_score: Mapped[Optional[float]] = mapped_column(Numeric(3, 2))
+    handoff_status: Mapped[Optional[str]] = mapped_column(Text, server_default="pending")
+    handed_off_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )

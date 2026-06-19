@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     # Outreach
     outreach_webhook_url: str = ""
+    handoff_min_score: float = 0.45  # warm+ leads qualify for handoff
 
     # Target
     target_country: str = "AE"
