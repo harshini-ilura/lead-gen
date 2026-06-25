@@ -16,6 +16,7 @@ queues and the Postgres data model.
 | 5 | Verification | [verify.md](verify.md) | MX (+ optional paid) checks; flag one primary email per contact |
 | 6 | Lead scoring | [scoring.md](scoring.md) | Weighted score (email + seniority + company + completeness) → `confidence_score` |
 | 7 | Outreach handoff | [handoff.md](handoff.md) | Qualify + suppression-gate + deliver leads to the outreach webhook |
+| 8 | Outreach push & sync | [outreach.md](outreach.md) | Push `ready` leads to Smartlead; sync replies/bounces/unsubs back + suppress |
 
 ## Data flow
 
@@ -23,7 +24,8 @@ queues and the Postgres data model.
 discovery_areas → [1 discover] → companies → [2 crawl] → crawl_cache
    → [3 extract contacts] → contacts → [4 generate emails] → contact_emails
    → [5 verify] → verified emails (+ is_primary) → [6 score] → contacts.confidence_score
-   → [7 handoff] → outreach webhook (qualified + suppression-cleared leads)
+   → [7 handoff] → ready leads (qualified + suppression-cleared)
+   → [8 outreach] → Smartlead campaign → reply/bounce/unsub synced back (+ suppress)
 ```
 
 ## Architecture diagrams
@@ -37,12 +39,15 @@ One per phase, in [`diagrams/`](diagrams/):
 - [Phase 5 — Verification](diagrams/phase5_architecture.png)
 - [Phase 6 — Lead scoring](diagrams/phase6_architecture.png)
 - [Phase 7 — Outreach handoff](diagrams/phase7_architecture.png)
+- [Phase 8 — Outreach push & reply/status sync](diagrams/phase8_architecture.png)
 
 ## Status
 
-All 7 phases are implemented and verified. Real outreach delivery activates once
-`OUTREACH_WEBHOOK_URL` is set. A reconciliation sweeper for stranded tasks (crawl
-and contact stages) is the main remaining hardening item.
+All 8 phases are implemented and verified. Phase 7 webhook delivery activates once
+`OUTREACH_WEBHOOK_URL` is set; Phase 8 (Smartlead push + reply/status sync)
+activates once `SMARTLEAD_API_KEY` + `SMARTLEAD_CAMPAIGN_ID` are set. A
+reconciliation sweeper for stranded tasks (crawl and contact stages) is the main
+remaining hardening item.
 
 ## Running
 
@@ -53,5 +58,6 @@ docker compose up -d
 docker compose exec api alembic upgrade head     # apply all migrations
 # keys in .env: GOOGLE_MAPS_API_KEY (Phase 1), OPENAI_API_KEY (Phase 3),
 #               MILLIONVERIFIER_API_KEY + PAID_VERIFY_ENABLED (Phase 5, optional),
-#               OUTREACH_WEBHOOK_URL (Phase 7, optional)
+#               OUTREACH_WEBHOOK_URL (Phase 7, optional),
+#               SMARTLEAD_API_KEY + SMARTLEAD_CAMPAIGN_ID (Phase 8, optional)
 ```

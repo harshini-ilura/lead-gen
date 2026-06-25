@@ -1,0 +1,59 @@
+// Phase 8 — Outreach Push & Reply/Status Sync
+// Render:  dot -Tpng phase8_architecture.dot -o phase8_architecture.png
+digraph phase8 {
+  rankdir=TB;
+  bgcolor="white";
+  node [fontname="Helvetica", fontsize=11, style="filled", color="#37474F", penwidth=1.2];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A"];
+  graph [fontname="Helvetica", labelloc="t", fontsize=18,
+         label="Phase 8 — Outreach Push & Reply/Status Sync"];
+
+  // ---- upstream ----
+  phase7 [label="Phase 7 — Handoff\ncontacts.handoff_status = 'ready'\noutreach_status = NULL",
+          shape=box, fillcolor="#ECEFF1"];
+
+  // ---- outbound (push) ----
+  subgraph cluster_push {
+    label="OUTBOUND  (push leads)"; style="rounded,filled"; fillcolor="#E3F2FD"; color="#90CAF9";
+    push_api  [label="POST /api/v1/outreach/push", shape=box, fillcolor="#BBDEFB"];
+    push_wk   [label="worker: push_ready_leads\n(Celery · scoring queue)\nselect ready + outreach_status NULL\n+ verification_status valid*", shape=box, fillcolor="#BBDEFB"];
+    push_int  [label="smartlead.push_leads()\nbatch 100 · de-dupe by email", shape=box, fillcolor="#BBDEFB"];
+  }
+
+  // ---- external ----
+  smartlead [label="Smartlead campaign\nsend · warmup · sequences", shape=cylinder, fillcolor="#FFF3E0", color="#FFB74D"];
+
+  // ---- inbound (reply/status sync) ----
+  subgraph cluster_sync {
+    label="INBOUND  (reply / status sync)"; style="rounded,filled"; fillcolor="#E8F5E9"; color="#A5D6A7";
+    wh_evt   [label="Smartlead webhook event\nEMAIL_REPLY / EMAIL_BOUNCE / LEAD_UNSUBSCRIBED", shape=box, fillcolor="#C8E6C9"];
+    sync_api [label="POST /api/v1/outreach/events", shape=box, fillcolor="#C8E6C9"];
+    parse    [label="smartlead.parse_event()\n→ (status, email)", shape=box, fillcolor="#C8E6C9"];
+    suppress [label="on bounce / unsubscribe\nadd_to_suppression(email)", shape=box, fillcolor="#C8E6C9"];
+  }
+
+  // ---- data ----
+  contacts [label="contacts.outreach_status\npushed / replied / bounced / unsubscribed",
+            shape=note, fillcolor="#F3E5F5", color="#CE93D8"];
+  supp     [label="suppression_list\n(blocks future handoff + push)", shape=note, fillcolor="#F3E5F5", color="#CE93D8"];
+
+  // ---- edges: push path ----
+  phase7  -> push_wk [label="eligible leads"];
+  push_api -> push_wk [label="enqueue", style=dashed];
+  push_wk -> push_int;
+  push_int -> smartlead [label="add leads"];
+  push_wk -> contacts [label="set 'pushed'", color="#8E24AA"];
+
+  // ---- edges: sync path ----
+  smartlead -> wh_evt [label="reply / bounce / unsub"];
+  wh_evt -> sync_api;
+  sync_api -> parse;
+  parse -> contacts [label="set status", color="#8E24AA"];
+  parse -> suppress [label="if bounce/unsub"];
+  suppress -> supp [color="#8E24AA"];
+
+  // suppression feeds back into gating
+  supp -> push_wk [label="excluded", style=dotted, constraint=false, color="#C62828"];
+
+  { rank=same; smartlead; contacts; }
+}

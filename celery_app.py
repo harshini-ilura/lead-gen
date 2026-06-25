@@ -20,5 +20,6 @@ celery.autodiscover_tasks(
         "app.workers.verify",
         "app.workers.scoring",
         "app.workers.handoff",
+        "app.workers.outreach",
     ]
 )

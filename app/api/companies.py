@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, text
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
@@ -7,10 +9,14 @@ from app.api.schemas import (
     DiscoveryTriggerRequest,
     DiscoveryTriggerResponse,
 )
-from app.db.models import Company, ContactEmail, DiscoveryArea
+from app.db.models import Company, Contact, ContactEmail, DiscoveryArea
 from app.db.session import get_db
+from app.integrations.smartlead import parse_event
+from app.services.suppression import add_to_suppression
 from app.sources.google_places import build_discovery_query
 from app.workers.discovery import get_areas_for_emirate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["companies"])
 
@@ -231,3 +237,54 @@ async def trigger_handoff(db: AsyncSession = Depends(get_db)):
         enqueued=len(ids),
         message=f"Handoff triggered for {len(ids)} companies",
     )
+
+
+@router.post("/outreach/push", response_model=DiscoveryTriggerResponse)
+async def trigger_outreach_push():
+    """Push handoff-cleared leads into the Smartlead campaign (Phase 8)."""
+    from celery_app import celery
+
+    celery.send_task("app.workers.outreach.push_ready_leads", queue="scoring")
+    return DiscoveryTriggerResponse(
+        enqueued=1, message="Outreach push enqueued (handoff-ready leads → Smartlead)"
+    )
+
+
+@router.post("/outreach/events")
+async def outreach_events(request: Request, db: AsyncSession = Depends(get_db)):
+    """Inbound Smartlead webhook (Phase 8 reply/status sync): reply / bounce /
+    unsubscribe → update the matching contact(s) and suppress on bounce/unsubscribe.
+
+    Matching is case-insensitive and may resolve to >1 contact (e.g. a shared role
+    email), so every contact carrying that address is updated.
+    """
+    payload = await request.json()
+    status, email = parse_event(payload)
+    if not email or not status:
+        logger.info("outreach event ignored (unmapped): %s", payload.get("event_type") or payload)
+        return {"ok": True, "ignored": True}
+
+    contact_ids = (
+        await db.execute(
+            select(ContactEmail.contact_id).where(
+                func.lower(ContactEmail.email) == email,
+                ContactEmail.contact_id.is_not(None),
+            )
+        )
+    ).scalars().all()
+
+    if contact_ids:
+        await db.execute(
+            update(Contact)
+            .where(Contact.contact_id.in_(contact_ids))
+            .values(outreach_status=status)
+        )
+    if status in ("bounced", "unsubscribed"):
+        await add_to_suppression(email, "email", f"outreach:{status}", db)
+
+    logger.info(
+        "outreach event %s for %s → %d contact(s)%s",
+        status, email, len(contact_ids),
+        " + suppressed" if status in ("bounced", "unsubscribed") else "",
+    )
+    return {"ok": True, "email": email, "status": status, "contacts": len(contact_ids)}

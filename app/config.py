@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     outreach_webhook_url: str = ""
     handoff_min_score: float = 0.45  # warm+ leads qualify for handoff
 
+    # Smartlead (Phase 8 outreach)
+    smartlead_api_key: str = ""
+    smartlead_campaign_id: str = ""
+    smartlead_base_url: str = "https://server.smartlead.ai/api/v1"
+    outreach_valid_only: bool = True  # only push paid-'valid' emails (deliverability)
+
     # Target
     target_country: str = "AE"
     target_niche: str = "real_estate_agency"
